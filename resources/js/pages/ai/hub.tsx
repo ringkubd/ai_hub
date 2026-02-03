@@ -902,11 +902,10 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
                                         <p className="text-xs text-slate-500">{source.table}</p>
                                     </div>
                                     <span
-                                        className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                                            source.is_active
+                                        className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${source.is_active
                                                 ? 'bg-emerald-100 text-emerald-600'
                                                 : 'bg-slate-100 text-slate-500'
-                                        }`}
+                                            }`}
                                     >
                                         {source.is_active ? 'active' : 'paused'}
                                     </span>
@@ -982,13 +981,12 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
                             URL: {qdrant.url}
                         </span>
                         <span
-                            className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                                qdrantHealth === 'ok'
+                            className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${qdrantHealth === 'ok'
                                     ? 'bg-emerald-100 text-emerald-600'
                                     : qdrantHealth === 'fail'
-                                      ? 'bg-rose-100 text-rose-600'
-                                      : 'bg-slate-100 text-slate-500'
-                            }`}
+                                        ? 'bg-rose-100 text-rose-600'
+                                        : 'bg-slate-100 text-slate-500'
+                                }`}
                         >
                             {qdrantHealth === 'ok' ? 'healthy' : qdrantHealth === 'fail' ? 'offline' : 'unknown'}
                         </span>

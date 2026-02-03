@@ -8,6 +8,7 @@ use App\Models\ProjectSource;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Database\QueryException;
 
 class ProjectSyncService
 {
@@ -90,6 +91,16 @@ class ProjectSyncService
         }
 
         foreach ($rows as $row) {
+            if (! isset($row->{$primaryKey}) || $row->{$primaryKey} === null || $row->{$primaryKey} === '') {
+                Log::warning('Skipping row with empty primary key', [
+                    'project' => $project->id,
+                    'source' => $source->id,
+                    'table' => $source->table,
+                    'primary_key' => $primaryKey,
+                ]);
+                continue;
+            }
+
             $payloadText = $this->buildPayloadText($fields, $row);
             $chunks = $chunker->chunk($payloadText, $chunkSize, $overlap);
 
@@ -99,7 +110,8 @@ class ProjectSyncService
                     continue;
                 }
                 $hash = hash('sha256', $chunk);
-                $pointId = $this->pointId($project->id, (string) $row->{$primaryKey}, $index, $hash);
+                $sourceId = (string) $row->{$primaryKey};
+                $pointId = $this->pointId($project->id, $sourceId, $index, $hash);
 
                 $existing = ProjectDocument::where('point_id', $pointId)->first();
                 if ($existing) {
@@ -118,21 +130,33 @@ class ProjectSyncService
                         'project_id' => $project->id,
                         'source' => $source->name,
                         'source_table' => $source->table,
-                        'source_id' => (string) $row->{$primaryKey},
+                        'source_id' => $sourceId,
                         'text' => $chunk,
                         'model' => $embeddingModel,
                     ],
                 ]]);
 
-                ProjectDocument::create([
-                    'project_id' => $project->id,
-                    'project_source_id' => $source->id,
-                    'source_type' => $source->table,
-                    'source_id' => (string) $row->{$primaryKey},
-                    'chunk_hash' => $hash,
-                    'content' => $chunk,
-                    'point_id' => $pointId,
-                ]);
+                try {
+                    ProjectDocument::create([
+                        'project_id' => $project->id,
+                        'project_source_id' => $source->id,
+                        'source_type' => $source->table,
+                        'source_id' => $sourceId,
+                        'chunk_hash' => $hash,
+                        'content' => $chunk,
+                        'point_id' => $pointId,
+                    ]);
+                } catch (QueryException $exception) {
+                    if ((int) ($exception->getCode() ?? 0) !== 23000) {
+                        throw $exception;
+                    }
+
+                    Log::info('Duplicate point_id detected, skipping', [
+                        'project' => $project->id,
+                        'source' => $source->id,
+                        'point_id' => $pointId,
+                    ]);
+                }
             }
         }
 
