@@ -6,6 +6,7 @@ use Illuminate\Http\Client\Response as HttpResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class OllamaProxy
 {
@@ -15,10 +16,10 @@ class OllamaProxy
     {
         $host = rtrim((string) config('ollama.host'), '/');
         $path = ltrim($path, '/');
-        $url = $host.'/'.$path;
+        $url = $host . '/' . $path;
 
         if ($request->getQueryString()) {
-            $url .= '?'.$request->getQueryString();
+            $url .= '?' . $request->getQueryString();
         }
 
         $method = strtoupper($request->method());
@@ -104,7 +105,7 @@ class OllamaProxy
         );
 
         return collect($headers)
-            ->mapWithKeys(fn (array $values, string $key) => [$key => implode(', ', $values)])
+            ->mapWithKeys(fn(array $values, string $key) => [$key => implode(', ', $values)])
             ->all();
     }
 
@@ -117,8 +118,8 @@ class OllamaProxy
         ];
 
         return collect($headers)
-            ->reject(fn (array $values, string $key) => in_array(strtolower($key), $blocked, true))
-            ->mapWithKeys(fn (array $values, string $key) => [$key => implode(', ', $values)])
+            ->reject(fn(array $values, string $key) => in_array(strtolower($key), $blocked, true))
+            ->mapWithKeys(fn(array $values, string $key) => [$key => implode(', ', $values)])
             ->all();
     }
 
@@ -175,9 +176,9 @@ class OllamaProxy
     private function cacheKey(string $method, string $path, Request $request, string $body): string
     {
         $query = $request->getQueryString() ?? '';
-        $hash = hash('sha256', $method.'|'.$path.'|'.$query.'|'.$body);
+        $hash = hash('sha256', $method . '|' . $path . '|' . $query . '|' . $body);
 
-        return 'ollama:cache:v1:'.$hash;
+        return 'ollama:cache:v1:' . $hash;
     }
 
     private function cacheStore()

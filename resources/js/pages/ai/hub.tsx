@@ -64,6 +64,26 @@ type ProjectForm = {
     };
 };
 
+type ProjectSource = {
+    id: number;
+    project_id: number;
+    name: string;
+    table: string;
+    primary_key: string;
+    fields: string[];
+    is_active: boolean;
+    last_synced_at?: string | null;
+};
+
+type SourceForm = {
+    project_id: number | null;
+    name: string;
+    table: string;
+    primary_key: string;
+    fields: string;
+    is_active: boolean;
+};
+
 const emptyProjectForm: ProjectForm = {
     name: '',
     slug: '',
@@ -81,6 +101,15 @@ const emptyProjectForm: ProjectForm = {
     },
 };
 
+const emptySourceForm: SourceForm = {
+    project_id: null,
+    name: '',
+    table: '',
+    primary_key: 'id',
+    fields: '',
+    is_active: true,
+};
+
 
 export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubProps) {
     const [projectList, setProjectList] = useState<Project[]>(projects);
@@ -94,6 +123,20 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
     const [apiKeyName, setApiKeyName] = useState('');
     const [apiKeyExpiry, setApiKeyExpiry] = useState('');
     const [apiToken, setApiToken] = useState('');
+    const [qdrantHealth, setQdrantHealth] = useState<'unknown' | 'ok' | 'fail'>('unknown');
+    const [collections, setCollections] = useState<{ name: string; points?: number }[]>([]);
+    const [collectionName, setCollectionName] = useState('');
+    const [collectionSize, setCollectionSize] = useState('768');
+    const [qdrantMethod, setQdrantMethod] = useState('GET');
+    const [qdrantPath, setQdrantPath] = useState('collections');
+    const [qdrantBody, setQdrantBody] = useState('');
+    const [qdrantResponse, setQdrantResponse] = useState('');
+    const [syncStatus, setSyncStatus] = useState('');
+    const [sourceProjectId, setSourceProjectId] = useState<number | null>(projects[0]?.id ?? null);
+    const [sourceList, setSourceList] = useState<ProjectSource[]>([]);
+    const [sourceForm, setSourceForm] = useState<SourceForm>(emptySourceForm);
+    const [sourceEditingId, setSourceEditingId] = useState<number | null>(null);
+    const [sourceStatus, setSourceStatus] = useState('');
 
     const headers = useMemo(() => defaultHeaders(), []);
 
@@ -108,6 +151,12 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
     useEffect(() => {
         fetchApiKeys();
     }, []);
+
+    useEffect(() => {
+        if (!sourceProjectId && projectList.length > 0) {
+            setSourceProjectId(projectList[0].id);
+        }
+    }, [projectList, sourceProjectId]);
 
     const refreshModels = async () => {
         setStatus('Refreshing models…');
@@ -242,6 +291,33 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
         }
     };
 
+    const loadQdrantStatus = async () => {
+        const health = await apiFetch('/ai/qdrant/health');
+        setQdrantHealth(health.ok ? 'ok' : 'fail');
+
+        const listResponse = await apiFetch('/ai/qdrant/collections');
+        const listData = await listResponse.json();
+        if (listResponse.ok) {
+            const names = Array.isArray(listData?.result?.collections)
+                ? listData.result.collections.map((item: { name: string }) => item.name)
+                : [];
+
+            const details = await Promise.all(
+                names.map(async (name: string) => {
+                    const infoRes = await apiFetch(`/ai/qdrant/collections/${name}`);
+                    const info = await infoRes.json();
+                    const points = info?.result?.points_count ?? info?.result?.points_count_exact ?? null;
+                    return { name, points };
+                }),
+            );
+            setCollections(details);
+        }
+    };
+
+    useEffect(() => {
+        loadQdrantStatus();
+    }, []);
+
     const revokeApiKey = async (id: number) => {
         const response = await apiFetch(`/ai/api-keys/${id}/revoke`, {
             method: 'POST',
@@ -249,6 +325,130 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
         });
         if (response.ok) {
             fetchApiKeys();
+        }
+    };
+
+    const syncProject = async (projectId: number) => {
+        setSyncStatus('Syncing project…');
+        const response = await apiFetch(`/ai/projects/${projectId}/sync`, {
+            method: 'POST',
+            headers,
+        });
+        if (response.ok) {
+            setSyncStatus('Project sync completed.');
+        } else {
+            setSyncStatus('Project sync failed.');
+        }
+    };
+
+    const syncAllProjects = async () => {
+        setSyncStatus('Syncing all active projects…');
+        const response = await apiFetch('/ai/projects/sync-all', {
+            method: 'POST',
+            headers,
+        });
+        if (response.ok) {
+            setSyncStatus('All project sync completed.');
+        } else {
+            setSyncStatus('Project sync failed.');
+        }
+    };
+
+    const loadSources = async (projectId: number) => {
+        const response = await apiFetch(`/ai/projects/${projectId}/sources`);
+        const data = await response.json();
+        if (response.ok) {
+            setSourceList(Array.isArray(data?.sources) ? data.sources : []);
+        }
+    };
+
+    useEffect(() => {
+        if (sourceProjectId) {
+            loadSources(sourceProjectId);
+        } else {
+            setSourceList([]);
+        }
+    }, [sourceProjectId]);
+
+    const resetSourceForm = (projectId: number | null) => {
+        setSourceForm({ ...emptySourceForm, project_id: projectId });
+        setSourceEditingId(null);
+    };
+
+    useEffect(() => {
+        if (sourceProjectId && !projectList.find((project) => project.id === sourceProjectId)) {
+            const nextId = projectList[0]?.id ?? null;
+            setSourceProjectId(nextId);
+            resetSourceForm(nextId);
+        }
+    }, [projectList, sourceProjectId]);
+
+    const saveSource = async () => {
+        if (!sourceProjectId) return;
+        const fields = sourceForm.fields
+            .split(',')
+            .map((field) => field.trim())
+            .filter(Boolean);
+        if (fields.length === 0) {
+            setSourceStatus('Add at least one field.');
+            return;
+        }
+
+        const payload = {
+            name: sourceForm.name,
+            table: sourceForm.table,
+            primary_key: sourceForm.primary_key || 'id',
+            fields,
+            is_active: sourceForm.is_active,
+        };
+
+        const endpoint = sourceEditingId
+            ? `/ai/projects/${sourceProjectId}/sources/${sourceEditingId}`
+            : `/ai/projects/${sourceProjectId}/sources`;
+        const response = await apiFetch(endpoint, {
+            method: sourceEditingId ? 'PUT' : 'POST',
+            headers,
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (response.ok) {
+            if (sourceEditingId) {
+                setSourceList((prev) =>
+                    prev.map((source) => (source.id === sourceEditingId ? data.source : source)),
+                );
+            } else {
+                setSourceList((prev) => [...prev, data.source]);
+            }
+            setSourceStatus('Source saved.');
+            resetSourceForm(sourceProjectId);
+        } else {
+            setSourceStatus('Failed to save source.');
+        }
+    };
+
+    const editSource = (source: ProjectSource) => {
+        setSourceForm({
+            project_id: source.project_id,
+            name: source.name,
+            table: source.table,
+            primary_key: source.primary_key,
+            fields: source.fields.join(', '),
+            is_active: source.is_active,
+        });
+        setSourceEditingId(source.id);
+    };
+
+    const deleteSource = async (sourceId: number) => {
+        if (!sourceProjectId) return;
+        const response = await apiFetch(`/ai/projects/${sourceProjectId}/sources/${sourceId}`, {
+            method: 'DELETE',
+            headers,
+        });
+        if (response.ok) {
+            setSourceList((prev) => prev.filter((source) => source.id !== sourceId));
+            setSourceStatus('Source deleted.');
+        } else {
+            setSourceStatus('Failed to delete source.');
         }
     };
 
@@ -490,7 +690,20 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
                                 Qdrant endpoint: {qdrant.url}
                             </p>
                         </div>
+                        <button
+                            type="button"
+                            onClick={syncAllProjects}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300"
+                        >
+                            Sync all
+                        </button>
                     </div>
+
+                    {syncStatus && (
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            {syncStatus}
+                        </div>
+                    )}
 
                     <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         {projectList.map((project) => (
@@ -505,8 +718,8 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
                                     </div>
                                     <span
                                         className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${project.is_active
-                                                ? 'bg-emerald-100 text-emerald-600'
-                                                : 'bg-slate-100 text-slate-500'
+                                            ? 'bg-emerald-100 text-emerald-600'
+                                            : 'bg-slate-100 text-slate-500'
                                             }`}
                                     >
                                         {project.is_active ? 'active' : 'paused'}
@@ -530,9 +743,281 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
                                     >
                                         Delete
                                     </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => syncProject(project.id)}
+                                        className="rounded-full border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-600 hover:border-emerald-300"
+                                    >
+                                        Sync now
+                                    </button>
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900">Project Sources</h2>
+                            <p className="text-xs text-slate-500">
+                                Define tables and fields to sync into Qdrant.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-[220px_1fr]">
+                        <select
+                            value={sourceProjectId ?? ''}
+                            onChange={(event) => {
+                                const id = Number(event.target.value || 0);
+                                setSourceProjectId(id || null);
+                                resetSourceForm(id || null);
+                            }}
+                            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                        >
+                            <option value="">Select project</option>
+                            {projectList.map((project) => (
+                                <option key={project.id} value={project.id}>
+                                    {project.name}
+                                </option>
+                            ))}
+                        </select>
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <input
+                                value={sourceForm.name}
+                                onChange={(event) => setSourceForm({ ...sourceForm, name: event.target.value })}
+                                placeholder="Source name"
+                                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                            />
+                            <input
+                                value={sourceForm.table}
+                                onChange={(event) => setSourceForm({ ...sourceForm, table: event.target.value })}
+                                placeholder="Table name"
+                                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                            />
+                            <input
+                                value={sourceForm.primary_key}
+                                onChange={(event) => setSourceForm({ ...sourceForm, primary_key: event.target.value })}
+                                placeholder="Primary key (default id)"
+                                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                            />
+                            <input
+                                value={sourceForm.fields}
+                                onChange={(event) => setSourceForm({ ...sourceForm, fields: event.target.value })}
+                                placeholder="Fields (comma separated)"
+                                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                            <input
+                                type="checkbox"
+                                checked={sourceForm.is_active}
+                                onChange={(event) =>
+                                    setSourceForm({ ...sourceForm, is_active: event.target.checked })
+                                }
+                            />
+                            Active
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                            {sourceEditingId && (
+                                <button
+                                    type="button"
+                                    onClick={() => resetSourceForm(sourceProjectId)}
+                                    className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300"
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={saveSource}
+                                className="rounded-2xl bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-slate-800"
+                            >
+                                {sourceEditingId ? 'Update source' : 'Add source'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {sourceStatus && (
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            {sourceStatus}
+                        </div>
+                    )}
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {sourceList.map((source) => (
+                            <div
+                                key={source.id}
+                                className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm"
+                            >
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-900">{source.name}</p>
+                                        <p className="text-xs text-slate-500">{source.table}</p>
+                                    </div>
+                                    <span
+                                        className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                            source.is_active
+                                                ? 'bg-emerald-100 text-emerald-600'
+                                                : 'bg-slate-100 text-slate-500'
+                                        }`}
+                                    >
+                                        {source.is_active ? 'active' : 'paused'}
+                                    </span>
+                                </div>
+                                <p className="mt-2 text-xs text-slate-600">
+                                    Fields: {source.fields.join(', ')}
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => editSource(source)}
+                                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => deleteSource(source.id)}
+                                        className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-500 hover:border-rose-300"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {sourceList.length === 0 && (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-xs text-slate-500">
+                                No sources found for this project.
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900">Qdrant Monitoring</h2>
+                            <p className="text-xs text-slate-500">API status and collection counts.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={loadQdrantStatus}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_140px]">
+                        <input
+                            value={collectionName}
+                            onChange={(event) => setCollectionName(event.target.value)}
+                            placeholder="collection name"
+                            className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                        />
+                        <input
+                            value={collectionSize}
+                            onChange={(event) => setCollectionSize(event.target.value)}
+                            placeholder="vector size"
+                            className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                        />
+                        <button
+                            type="button"
+                            onClick={createCollection}
+                            className="rounded-2xl bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-slate-800"
+                        >
+                            Create
+                        </button>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            URL: {qdrant.url}
+                        </span>
+                        <span
+                            className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                qdrantHealth === 'ok'
+                                    ? 'bg-emerald-100 text-emerald-600'
+                                    : qdrantHealth === 'fail'
+                                      ? 'bg-rose-100 text-rose-600'
+                                      : 'bg-slate-100 text-slate-500'
+                            }`}
+                        >
+                            {qdrantHealth === 'ok' ? 'healthy' : qdrantHealth === 'fail' ? 'offline' : 'unknown'}
+                        </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {collections.map((collection) => (
+                            <div
+                                key={collection.name}
+                                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-900">{collection.name}</p>
+                                        <p className="text-xs text-slate-500">
+                                            Points: {collection.points ?? '—'}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => deleteCollection(collection.name)}
+                                        className="text-xs font-semibold text-rose-500 hover:text-rose-600"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {collections.length === 0 && (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-xs text-slate-500">
+                                No collections found.
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-6 rounded-3xl border border-slate-200/70 bg-slate-50 p-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <select
+                                value={qdrantMethod}
+                                onChange={(event) => setQdrantMethod(event.target.value)}
+                                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                            >
+                                {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => (
+                                    <option key={method} value={method}>
+                                        {method}
+                                    </option>
+                                ))}
+                            </select>
+                            <input
+                                value={qdrantPath}
+                                onChange={(event) => setQdrantPath(event.target.value)}
+                                placeholder="qdrant path (e.g. collections)"
+                                className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                            />
+                            <button
+                                type="button"
+                                onClick={sendQdrantRequest}
+                                className="rounded-2xl bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-slate-800"
+                            >
+                                Send
+                            </button>
+                        </div>
+                        <textarea
+                            value={qdrantBody}
+                            onChange={(event) => setQdrantBody(event.target.value)}
+                            placeholder="JSON body (optional)"
+                            className="mt-3 min-h-[120px] w-full rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-700"
+                        />
+                        <pre className="mt-3 max-h-64 overflow-auto rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                            {qdrantResponse || 'Response will appear here.'}
+                        </pre>
                     </div>
                 </section>
 
@@ -620,3 +1105,44 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
         </AppLayout>
     );
 }
+    const createCollection = async () => {
+        if (!collectionName.trim()) return;
+        const response = await apiFetch('/ai/qdrant/collections', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                name: collectionName.trim(),
+                size: Number(collectionSize),
+            }),
+        });
+        if (response.ok) {
+            setCollectionName('');
+            await loadQdrantStatus();
+        }
+    };
+
+    const deleteCollection = async (name: string) => {
+        const response = await apiFetch(`/ai/qdrant/collections/${name}`, {
+            method: 'DELETE',
+            headers,
+        });
+        if (response.ok) {
+            await loadQdrantStatus();
+        }
+    };
+
+    const sendQdrantRequest = async () => {
+        const path = qdrantPath.replace(/^\/+/, '');
+        const options: RequestInit = {
+            method: qdrantMethod,
+            headers,
+        };
+
+        if (qdrantMethod !== 'GET' && qdrantMethod !== 'HEAD' && qdrantBody.trim()) {
+            options.body = qdrantBody;
+        }
+
+        const response = await apiFetch(`/ai/qdrant/proxy/${path}`, options);
+        const text = await response.text();
+        setQdrantResponse(text);
+    };

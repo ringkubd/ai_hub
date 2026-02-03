@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Project;
+use App\Services\ProjectSyncService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -19,7 +20,6 @@ class SyncProjectToQdrant implements ShouldQueue
 
     public function handle(): void
     {
-        // Placeholder: pull project data, build embeddings, upsert into Qdrant.
-        $this->project->forceFill(['last_synced_at' => now()])->save();
+        app(ProjectSyncService::class)->sync($this->project);
     }
 }

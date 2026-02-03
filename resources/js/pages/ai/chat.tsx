@@ -55,7 +55,7 @@ export default function AiChat({ projects, models, sessions }: ChatProps) {
                     setSessionList(data.sessions);
                 }
             })
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     useEffect(() => {
@@ -135,7 +135,7 @@ export default function AiChat({ projects, models, sessions }: ChatProps) {
                         setSessionList(payload.sessions);
                     }
                 })
-                .catch(() => {});
+                .catch(() => { });
         } catch (error) {
             console.error(error);
         } finally {
@@ -210,11 +210,10 @@ export default function AiChat({ projects, models, sessions }: ChatProps) {
                                             setActiveSession(session.id);
                                             loadSessionMessages(session.id);
                                         }}
-                                        className={`rounded-2xl border px-3 py-2 text-left text-xs font-semibold ${
-                                            activeSession === session.id
+                                        className={`rounded-2xl border px-3 py-2 text-left text-xs font-semibold ${activeSession === session.id
                                                 ? 'border-slate-900 bg-slate-900 text-white'
                                                 : 'border-slate-200 bg-white text-slate-600'
-                                        }`}
+                                            }`}
                                     >
                                         {session.title ?? `Session ${session.id}`}
                                     </button>
@@ -225,11 +224,10 @@ export default function AiChat({ projects, models, sessions }: ChatProps) {
                             <button
                                 type="button"
                                 onClick={() => setActiveProject(null)}
-                                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                                    !activeProject
+                                className={`rounded-full border px-3 py-1 text-xs font-semibold ${!activeProject
                                         ? 'border-slate-900 bg-slate-900 text-white'
                                         : 'border-slate-200 bg-white text-slate-600'
-                                }`}
+                                    }`}
                             >
                                 Global
                             </button>
@@ -238,11 +236,10 @@ export default function AiChat({ projects, models, sessions }: ChatProps) {
                                     key={project.id}
                                     type="button"
                                     onClick={() => setActiveProject(project)}
-                                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                                        activeProject?.id === project.id
+                                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${activeProject?.id === project.id
                                             ? 'border-slate-900 bg-slate-900 text-white'
                                             : 'border-slate-200 bg-white text-slate-600'
-                                    }`}
+                                        }`}
                                 >
                                     @{project.slug}
                                 </button>
@@ -255,11 +252,10 @@ export default function AiChat({ projects, models, sessions }: ChatProps) {
 
                         <button
                             type="button"
-                            className={`rounded-2xl border px-3 py-2 text-xs font-semibold ${
-                                useStream
+                            className={`rounded-2xl border px-3 py-2 text-xs font-semibold ${useStream
                                     ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
                                     : 'border-slate-200 bg-white text-slate-600'
-                            }`}
+                                }`}
                             onClick={() => setUseStream((prev) => !prev)}
                         >
                             {useStream ? 'Streaming enabled' : 'Streaming disabled'}
@@ -273,11 +269,10 @@ export default function AiChat({ projects, models, sessions }: ChatProps) {
                                 .map((message, index) => (
                                     <div
                                         key={`${message.role}-${index}`}
-                                        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                                            message.role === 'user'
+                                        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${message.role === 'user'
                                                 ? 'ml-auto bg-slate-900 text-white'
                                                 : 'mr-auto bg-slate-100 text-slate-700'
-                                        }`}
+                                            }`}
                                     >
                                         {message.content}
                                     </div>

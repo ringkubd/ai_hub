@@ -11,7 +11,6 @@ class OllamaAdminController
     public function tags(OllamaClient $client): JsonResponse
     {
         $response = $client->tags();
-
         return response()->json($response->json(), $response->status());
     }
 

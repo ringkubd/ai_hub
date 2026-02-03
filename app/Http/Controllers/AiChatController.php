@@ -6,9 +6,11 @@ use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Models\Project;
 use App\Services\OllamaClient;
+use App\Services\RetrievalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -96,6 +98,37 @@ class AiChatController
             ? sprintf('You are a helpful assistant for project "%s". Answer using only this project\'s context. If context is missing, say so.', $project->name)
             : 'You are a helpful assistant. Answer across all available project knowledge.';
 
+        $cacheKey = 'aihub:response:'.hash('sha256', ($project?->id ?? 0).'|'.$data['model'].'|'.$data['message']);
+        $cachedResponse = Cache::get($cacheKey);
+        if (is_string($cachedResponse)) {
+            return response()->json([
+                'session_id' => $session->id,
+                'assistant' => $cachedResponse,
+            ]);
+        }
+
+        $contextSnippets = [];
+        if ($project) {
+            $contextSnippets = app(RetrievalService::class)->retrieve($project, $data['message']);
+        } else {
+            $activeProjects = Project::where('is_active', true)->get();
+            $contextSnippets = app(RetrievalService::class)->retrieveAcrossProjects($activeProjects, $data['message']);
+        }
+
+        if ($contextSnippets !== []) {
+            $contextText = collect($contextSnippets)
+                ->map(function (array $item, int $index) use ($project): string {
+                    if ($project) {
+                        return sprintf('[%d] %s', $index + 1, $item['text']);
+                    }
+
+                    $label = $item['project_name'] ?? $item['project_slug'] ?? 'Unknown project';
+                    return sprintf('[%d] (%s) %s', $index + 1, $label, $item['text']);
+                })
+                ->implode("\n\n");
+            $systemPrompt .= "\n\nContext snippets:\n".$contextText;
+        }
+
         $contextMessages = $session->messages()
             ->orderByDesc('id')
             ->limit(20)
@@ -109,7 +142,7 @@ class AiChatController
             ->all();
 
         $payload = [
-            'model' => $data['model'],
+            'model' => config('aihub.llm_model') ?: $data['model'],
             'messages' => array_merge([['role' => 'system', 'content' => $systemPrompt]], $contextMessages),
             'stream' => false,
         ];
@@ -139,6 +172,12 @@ class AiChatController
             'title' => $session->title ?? Str::limit($data['message'], 40),
         ])
             ->save();
+
+        Cache::put(
+            $cacheKey,
+            $assistant,
+            (int) config('aihub.retrieval.response_cache_ttl')
+        );
 
         return response()->json([
             'session_id' => $session->id,

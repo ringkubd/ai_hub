@@ -221,11 +221,10 @@ export default function OllamaChat() {
                         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Streaming</label>
                         <button
                             type="button"
-                            className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                                useStream
+                            className={`rounded-lg border px-3 py-2 text-sm font-medium ${useStream
                                     ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
                                     : 'border-slate-200 bg-white text-slate-600'
-                            }`}
+                                }`}
                             onClick={() => setUseStream((prev) => !prev)}
                         >
                             {useStream ? 'Streaming enabled' : 'Streaming disabled'}
@@ -239,11 +238,10 @@ export default function OllamaChat() {
                                 .map((message, index) => (
                                     <div
                                         key={`${message.role}-${index}`}
-                                        className={`rounded-xl px-4 py-3 text-sm shadow-sm ${
-                                            message.role === 'user'
+                                        className={`rounded-xl px-4 py-3 text-sm shadow-sm ${message.role === 'user'
                                                 ? 'ml-auto bg-slate-900 text-white'
                                                 : 'mr-auto bg-white text-slate-700'
-                                        }`}
+                                            }`}
                                     >
                                         {message.content}
                                     </div>
