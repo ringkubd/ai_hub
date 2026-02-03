@@ -276,7 +276,7 @@ class ProjectSyncService
     private function pointId(int $projectId, string $sourceId, int $index, string $hash): string
     {
         $raw = hash('sha256', $projectId . '|' . $sourceId . '|' . $index . '|' . $hash);
-        return $this->hashToUnsignedIntString($raw);
+        return $this->hashToUuid($raw);
     }
 
     private function collectionName(Project $project): string
@@ -410,18 +410,22 @@ class ProjectSyncService
         return trim($text);
     }
 
-    private function hashToUnsignedIntString(string $hex): string
+    private function hashToUuid(string $hex): string
     {
         $hex = preg_replace('/[^0-9a-f]/i', '', $hex) ?? '';
-        if ($hex === '') {
-            return '0';
-        }
+        $hex = str_pad($hex, 32, '0');
+        $hex = substr($hex, 0, 32);
 
-        $slice = substr($hex, 0, 16);
-        if ($slice === '' || $slice === false) {
-            return '0';
-        }
+        $hex[12] = '4';
+        $hex[16] = dechex((hexdec($hex[16]) & 0x3) | 0x8);
 
-        return base_convert($slice, 16, 10);
+        return sprintf(
+            '%s-%s-%s-%s-%s',
+            substr($hex, 0, 8),
+            substr($hex, 8, 4),
+            substr($hex, 12, 4),
+            substr($hex, 16, 4),
+            substr($hex, 20, 12)
+        );
     }
 }
