@@ -18,6 +18,8 @@ class Project extends Model
         'connection',
         'env_key',
         'qdrant_collection',
+        'include_tables',
+        'exclude_tables',
         'is_active',
         'last_synced_at',
     ];
@@ -26,6 +28,8 @@ class Project extends Model
         'connection' => 'encrypted:array',
         'is_active' => 'boolean',
         'last_synced_at' => 'datetime',
+        'include_tables' => 'array',
+        'exclude_tables' => 'array',
     ];
 
     protected static function booted(): void

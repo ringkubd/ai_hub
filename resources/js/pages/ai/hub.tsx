@@ -10,6 +10,8 @@ type Project = {
     description?: string | null;
     env_key?: string | null;
     qdrant_collection?: string | null;
+    include_tables?: string[] | null;
+    exclude_tables?: string[] | null;
     is_active: boolean;
     connection?: {
         driver?: string;
@@ -53,6 +55,8 @@ type ProjectForm = {
     description: string;
     env_key: string;
     qdrant_collection: string;
+    include_tables: string;
+    exclude_tables: string;
     is_active: boolean;
     connection: {
         driver: string;
@@ -90,6 +94,8 @@ const emptyProjectForm: ProjectForm = {
     description: '',
     env_key: '',
     qdrant_collection: '',
+    include_tables: '',
+    exclude_tables: '',
     is_active: true,
     connection: {
         driver: '',
@@ -216,6 +222,12 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
         const payload = {
             ...projectForm,
             connection: projectForm.env_key ? null : projectForm.connection,
+            include_tables: projectForm.include_tables
+                ? projectForm.include_tables.split(',').map((value) => value.trim()).filter(Boolean)
+                : [],
+            exclude_tables: projectForm.exclude_tables
+                ? projectForm.exclude_tables.split(',').map((value) => value.trim()).filter(Boolean)
+                : [],
         };
         const response = await apiFetch(
             editingId ? `/ai/projects/${editingId}` : '/ai/projects',
@@ -247,6 +259,8 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
             description: project.description ?? '',
             env_key: project.env_key ?? '',
             qdrant_collection: project.qdrant_collection ?? '',
+            include_tables: Array.isArray(project.include_tables) ? project.include_tables.join(', ') : '',
+            exclude_tables: Array.isArray(project.exclude_tables) ? project.exclude_tables.join(', ') : '',
             is_active: project.is_active,
             connection: {
                 driver: project.connection?.driver ?? '',
@@ -624,6 +638,24 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
                                         setProjectForm({ ...projectForm, env_key: event.target.value.toUpperCase() })
                                     }
                                     placeholder="Env prefix (optional)"
+                                    className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                                />
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                                <input
+                                    value={projectForm.include_tables}
+                                    onChange={(event) =>
+                                        setProjectForm({ ...projectForm, include_tables: event.target.value })
+                                    }
+                                    placeholder="Include tables (comma separated)"
+                                    className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                                />
+                                <input
+                                    value={projectForm.exclude_tables}
+                                    onChange={(event) =>
+                                        setProjectForm({ ...projectForm, exclude_tables: event.target.value })
+                                    }
+                                    placeholder="Exclude tables (comma separated)"
                                     className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                                 />
                             </div>
@@ -1145,4 +1177,3 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
         </AppLayout>
     );
 }
-
