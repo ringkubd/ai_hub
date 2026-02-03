@@ -452,6 +452,48 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
         }
     };
 
+    const createCollection = async () => {
+        if (!collectionName.trim()) return;
+        const response = await apiFetch('/ai/qdrant/collections', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                name: collectionName.trim(),
+                size: Number(collectionSize),
+            }),
+        });
+        if (response.ok) {
+            setCollectionName('');
+            await loadQdrantStatus();
+        }
+    };
+
+    const deleteCollection = async (name: string) => {
+        const response = await apiFetch(`/ai/qdrant/collections/${name}`, {
+            method: 'DELETE',
+            headers,
+        });
+        if (response.ok) {
+            await loadQdrantStatus();
+        }
+    };
+
+    const sendQdrantRequest = async () => {
+        const path = qdrantPath.replace(/^\/+/, '');
+        const options: RequestInit = {
+            method: qdrantMethod,
+            headers,
+        };
+
+        if (qdrantMethod !== 'GET' && qdrantMethod !== 'HEAD' && qdrantBody.trim()) {
+            options.body = qdrantBody;
+        }
+
+        const response = await apiFetch(`/ai/qdrant/proxy/${path}`, options);
+        const text = await response.text();
+        setQdrantResponse(text);
+    };
+
     return (
         <AppLayout>
             <Head title="AI Hub" />
@@ -1105,44 +1147,4 @@ export default function AiHub({ projects, models, ollamaOnline, qdrant }: HubPro
         </AppLayout>
     );
 }
-    const createCollection = async () => {
-        if (!collectionName.trim()) return;
-        const response = await apiFetch('/ai/qdrant/collections', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                name: collectionName.trim(),
-                size: Number(collectionSize),
-            }),
-        });
-        if (response.ok) {
-            setCollectionName('');
-            await loadQdrantStatus();
-        }
-    };
 
-    const deleteCollection = async (name: string) => {
-        const response = await apiFetch(`/ai/qdrant/collections/${name}`, {
-            method: 'DELETE',
-            headers,
-        });
-        if (response.ok) {
-            await loadQdrantStatus();
-        }
-    };
-
-    const sendQdrantRequest = async () => {
-        const path = qdrantPath.replace(/^\/+/, '');
-        const options: RequestInit = {
-            method: qdrantMethod,
-            headers,
-        };
-
-        if (qdrantMethod !== 'GET' && qdrantMethod !== 'HEAD' && qdrantBody.trim()) {
-            options.body = qdrantBody;
-        }
-
-        const response = await apiFetch(`/ai/qdrant/proxy/${path}`, options);
-        const text = await response.text();
-        setQdrantResponse(text);
-    };
