@@ -299,8 +299,9 @@ export default function ProjectsAiPage() {
                                 {conversations.map((conv) => (
                                     <div
                                         key={conv.id}
-                                        className={`group flex items-center gap-2 rounded-lg p-2 text-sm transition-colors hover:bg-accent ${conversationId === conv.id ? 'bg-accent' : ''
-                                            }`}
+                                        className={`group flex items-center gap-2 rounded-lg p-2 text-sm transition-colors hover:bg-accent ${
+                                            conversationId === conv.id ? 'bg-accent' : ''
+                                        }`}
                                     >
                                         <button
                                             type="button"
@@ -364,10 +365,11 @@ export default function ProjectsAiPage() {
                             {messages.map((message, index) => (
                                 <div
                                     key={`${message.role}-${index}`}
-                                    className={`max-w-3xl rounded-lg px-3 py-2 text-sm ${message.role === 'user'
+                                    className={`max-w-3xl rounded-lg px-3 py-2 text-sm ${
+                                        message.role === 'user'
                                             ? 'ml-auto bg-primary text-primary-foreground'
                                             : 'bg-muted text-foreground'
-                                        }`}
+                                    }`}
                                 >
                                     {message.content ? (
                                         <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">

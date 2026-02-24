@@ -1,13 +1,13 @@
-import { useMemo, useRef, useState, useEffect } from 'react';
-import type { FormEvent } from 'react';
 import { Head } from '@inertiajs/react';
 import { useEcho } from '@laravel/echo-react';
-import { MessageSquare, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
+import { MessageSquare, Plus, Trash2 } from 'lucide-react';
 
 type AskResponse = {
     answer: string;
@@ -90,8 +90,8 @@ export default function ProjectsAiPage() {
             const data = await response.json();
             setConversationId(id);
             setMessages(
-                data.messages.map((msg: { role: string; content: string }) => ({
-                    role: msg.role as 'user' | 'assistant',
+                data.messages.map((msg: any) => ({
+                    role: msg.role,
                     content: msg.content,
                     status: 'complete',
                 })),
@@ -299,8 +299,9 @@ export default function ProjectsAiPage() {
                                 {conversations.map((conv) => (
                                     <div
                                         key={conv.id}
-                                        className={`group flex items-center gap-2 rounded-lg p-2 text-sm transition-colors hover:bg-accent ${conversationId === conv.id ? 'bg-accent' : ''
-                                            }`}
+                                        className={`group flex items-center gap-2 rounded-lg p-2 text-sm transition-colors hover:bg-accent ${
+                                            conversationId === conv.id ? 'bg-accent' : ''
+                                        }`}
                                     >
                                         <button
                                             type="button"
@@ -364,10 +365,11 @@ export default function ProjectsAiPage() {
                             {messages.map((message, index) => (
                                 <div
                                     key={`${message.role}-${index}`}
-                                    className={`max-w-3xl rounded-lg px-3 py-2 text-sm ${message.role === 'user'
+                                    className={`max-w-3xl rounded-lg px-3 py-2 text-sm ${
+                                        message.role === 'user'
                                             ? 'ml-auto bg-primary text-primary-foreground'
                                             : 'bg-muted text-foreground'
-                                        }`}
+                                    }`}
                                 >
                                     {message.content ? (
                                         <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
